@@ -66,10 +66,57 @@ class LoanService
      * @param  string  $currencyCode
      * @param  string  $receivedAt
      *
-     * @return ReceivedRepayment
+     * @return Loan
      */
-    public function repayLoan(Loan $loan, int $amount, string $currencyCode, string $receivedAt): ReceivedRepayment
+    public function repayLoan(Loan $loan, int $amount, string $currencyCode, string $receivedAt): Loan
     {
         //
+        return DB::transaction(function () use ($loan, $amount, $currencyCode, $receivedAt) {
+            $totalRepaid = $loan->scheduledRepayments()->where([
+                'status' => Loan::STATUS_REPAID
+            ])->sum('amount');
+
+            $loanOutstandingAmount = $loan->amount - $amount - $totalRepaid;
+
+            $loan->update([
+                'outstanding_amount' => $loanOutstandingAmount,
+                'status' => $loanOutstandingAmount == 0 ? ScheduledRepayment::STATUS_REPAID : ScheduledRepayment::STATUS_DUE
+            ]);
+
+            $scheduledRepayments = $loan->scheduledRepayments()->where([
+                'due_date' => $receivedAt,
+                'currency_code' => $currencyCode
+            ]);
+            
+            $outstandingAmount = $scheduledRepayments->first()->outstanding_amount - $amount;
+            if($outstandingAmount < 0){
+                $scheduledRepayments->update([
+                    'outstanding_amount' => 0,
+                    'status' => ScheduledRepayment::STATUS_REPAID
+                ]);
+
+                $nextDueDate = Carbon::parse($receivedAt)->addMonth(1)->format('Y-m-d');
+                $this->repayLoan($loan, abs($outstandingAmount), $currencyCode, $nextDueDate);
+            }else {
+                $status = ScheduledRepayment::STATUS_DUE;
+                if($outstandingAmount == 0){
+                    $status = ScheduledRepayment::STATUS_REPAID;
+                }else if($outstandingAmount < $scheduledRepayments->first()->amount){
+                    $status = ScheduledRepayment::STATUS_PARTIAL;
+                }
+                $scheduledRepayments->update([
+                    'outstanding_amount' => $outstandingAmount,
+                    'status' => $status
+                ]);
+            }
+
+            $loan->receivedRepayments()->create([
+                'amount' => $amount,
+                'currency_code' => $currencyCode,
+                'received_at' => $receivedAt
+            ]);
+
+            return $loan;
+        });
     }
 }
