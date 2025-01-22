@@ -156,4 +156,37 @@ class DebitCardTransactionControllerTest extends TestCase
     }
 
     // Extra bonus for extra tests :)
+    public function testCustomerCannotCreateADebitCardTransactionWithWrongValidation()
+    {
+        // post /debit-card-transactions
+        $data = [
+            'debit_card_id' => $this->debitCard->id,
+        ];
+
+        $res = $this->postJson('api/debit-card-transactions', $data);
+        $res->assertStatus(422)
+            ->assertJsonValidationErrorFor('amount')
+            ->assertJsonValidationErrorFor('currency_code');
+
+        $data = [
+            'debit_card_id' => $this->debitCard->id,
+            'amount' => 'string',
+        ];
+
+        $res = $this->postJson('api/debit-card-transactions', $data);
+        $res->assertStatus(422)
+            ->assertJsonValidationErrorFor('amount')
+            ->assertJsonValidationErrorFor('currency_code');
+
+        $data = [
+            'debit_card_id' => $this->debitCard->id,
+            'amount' => 'string',
+            'currency_code' => 'TES'
+        ];
+
+        $res = $this->postJson('api/debit-card-transactions', $data);
+        $res->assertStatus(422)
+            ->assertJsonValidationErrorFor('amount')
+            ->assertJsonValidationErrorFor('currency_code');
+    }
 }
