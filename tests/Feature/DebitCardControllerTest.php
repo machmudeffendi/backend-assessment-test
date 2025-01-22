@@ -93,6 +93,9 @@ class DebitCardControllerTest extends TestCase
     public function testCustomerCannotSeeASingleDebitCardDetails()
     {
         // get api/debit-cards/{debitCard}
+        $res = $this->getJson('/api/debit-cards/1');
+        $res->assertStatus(404)
+            ->assertJsonMissing(['id' => 1]);
     }
 
     public function testCustomerCanActivateADebitCard()
